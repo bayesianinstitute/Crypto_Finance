@@ -4,6 +4,26 @@ import yfinance as yf
 import os
 from langchain_openai import ChatOpenAI
 from langchain_experimental.agents import create_pandas_dataframe_agent
+from langchain_community.callbacks.streamlit import (
+    StreamlitCallbackHandler,
+)
+
+from langchain.agents import tool
+from plotly.graph_objects import Figure
+from plotly.io import from_json
+import json
+
+@tool
+def plotChart(data: str) -> int:
+    """Plots json data using plotly Figure. Use it only for ploting charts and graphs."""
+    # Load JSON data
+    figure_dict = json.loads(data)
+
+    # Create Figure object from JSON data
+    fig = from_json(json.dumps(figure_dict))
+
+    st.plotly_chart(fig)
+
 
 # Function to download cryptocurrency data
 def download_crypto_data(ticker, start_date, end_date):
@@ -66,12 +86,14 @@ def main():
             st.error("OpenAI API key is not set. Please set OPENAI_API_KEY environment variable.")
         else:
             # create Agent AI
+            tools = [plotChart]
             llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0, api_key=api_key)
             agent_executor = create_pandas_dataframe_agent(
                 llm,
                 df,
                 agent_type="openai-tools",
                 verbose=True,
+                extra_tools=tools
             )
 
             # Query input
@@ -79,7 +101,11 @@ def main():
 
             # Run query button
             if st.button("Run Query"):
-                query_output = agent_executor.invoke(input=query_input)
+                st_callback = StreamlitCallbackHandler( st.container())
+                query_output = agent_executor.invoke(
+                    {"input": query_input},
+                    {"callbacks": [st_callback]})
+                    
                 st.write("Query:", query_input)
                 st.write("Answer:", query_output['output'])
     else:
